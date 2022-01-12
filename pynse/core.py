@@ -435,7 +435,6 @@ class Nse:
         # if date is not given select first date from history
         req_date = self.trading_days(
         )[-1].date() if req_date is None else req_date
-
         filename = f'{self.dir["bhavcopy_eq"]}bhav_{req_date}.pkl'
 
         bhavcopy = None
@@ -448,17 +447,28 @@ class Nse:
         # if file is not present
         # download the file
         else:
-            config = self.__urls
-            url = config['path']['bhavcopy'].format(
-                date=req_date.strftime("%d%m%Y"))
-            csv = self.__get_resp(url).content.decode('utf8').replace(" ", "")
+            try:
+                config = self.__urls
+                url = config['path']['bhavcopy'].format(
+                    date=req_date.strftime("%d%m%Y"))
+                csv = self.__get_resp(url).content.decode('utf8').replace(" ", "")
+                bhavcopy = pd.read_csv(io.StringIO(csv))
+                dt_col = "DATE1"
+                if dt_col not in bhavcopy.columns:
+                    raise Exception()
+            except:
+                url = f"https://archives.nseindia.com/content/historical/EQUITIES/{req_date.strftime('%Y')}/{req_date.strftime('%b').upper()}/cm{req_date.strftime('%d%b%Y').upper()}bhav.csv.zip"
+                stream = self.__get_resp(url).content;
+                filebytes = io.BytesIO(stream)
+                zf = zipfile.ZipFile(filebytes)
+                bhavcopy = pd.read_csv(zf.open(zf.namelist()[0]))
+                dt_col = "TIMESTAMP"
+            finally:
+                bhavcopy["DATE1"] = bhavcopy[dt_col].apply(
+                    lambda x: dt.datetime.strptime(x, '%d-%b-%Y').date())
 
-            bhavcopy = pd.read_csv(io.StringIO(csv))
-            bhavcopy["DATE1"] = bhavcopy["DATE1"].apply(
-                lambda x: dt.datetime.strptime(x, '%d-%b-%Y').date())
-
-            # save the downloaded bhavcopy
-            bhavcopy.to_pickle(filename)
+                # save the downloaded bhavcopy
+                bhavcopy.to_pickle(filename)
 
         if bhavcopy is not None:
             # filter as as required
